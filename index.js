@@ -77,16 +77,16 @@ aiseg2.prototype.discover = function() {
         };
         let tryproc = () => {
             client = new ssdp();
-        client.on('response', (headers, statusCode, rinfo) => {
-            // AiSEG2を発見
-            if (timer != null) {
-                clearTimeout(timer);
-                timer = null;
-            }
-            client.stop();
-            resolve(rinfo.address);
-        });
-        client.search('urn:panasonic-com:service:p60AiSeg2DataService:1');
+            client.on('response', (headers, statusCode, rinfo) => {
+                // AiSEG2を発見
+                if (timer != null) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                client.stop();
+                resolve(rinfo.address);
+            });
+            client.search('urn:panasonic-com:service:p60AiSeg2DataService:1');
             timer = setTimeout(timeout, 1000);
         };
         tryproc();
@@ -176,6 +176,9 @@ aiseg2.prototype.doShutter = async function(address, device, op) {
             method:  'GET',
             headers: headers
         });
+        if (response.response.statusCode != 200) {
+            throw new Error(`shutter ${device.name} operation failed.`);
+        }
         // 読み出したhtmlに下記のような感じでトークンが書かれているのでそれを抜き出す。
         // <!-- コントロールID -->
         // <span class="setting_value" style="display:none;">76856</span>
@@ -198,7 +201,7 @@ aiseg2.prototype.doShutter = async function(address, device, op) {
         // a) 頭に'data='を付ける。
         // b) objSendDataプロパティの中身はJSON.stringifyが必要な素敵仕様。
         debug(`aiseg2.doShutter: ${device.nodeId} ${device.eoj} ${device.type} ${op}`);
-        await this.digestRequest.requestAsync({
+        response = await this.digestRequest.requestAsync({
             host:    host,
             path:    '/action/devices/device/325/operation',
             port:    PORT,
@@ -216,6 +219,9 @@ aiseg2.prototype.doShutter = async function(address, device, op) {
             }),
             headers: headers
         });
+        if (response.response.statusCode != 200) {
+            throw new Error(`shutter ${device.name} operation failed.`);
+        }
         return `shutter ${device.name} operation ${op} success.`;
     } catch (err) {
         throw new Error(`shutter ${device.name} operation failed.`);
