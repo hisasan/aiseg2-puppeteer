@@ -63,8 +63,20 @@ var aiseg2 = function(opt) {
 // ssdpプロトコルでAiSEG2のurnを検索し、resolve()経由でIPアドレスが得られる
 aiseg2.prototype.discover = function() {
     return new Promise((resolve, reject) => {
-        let client = new ssdp();
+        let client = null;
         let timer  = null;
+        let trycount = 0;
+        let timeout = () => {
+            timer = null;
+            client.stop();
+            if (++trycount < 5) {
+                tryproc();
+            } else {
+                reject(new Error('Can\'t found AiSEG2'));
+            }
+        };
+        let tryproc = () => {
+            client = new ssdp();
         client.on('response', (headers, statusCode, rinfo) => {
             // AiSEG2を発見
             if (timer != null) {
@@ -75,12 +87,9 @@ aiseg2.prototype.discover = function() {
             resolve(rinfo.address);
         });
         client.search('urn:panasonic-com:service:p60AiSeg2DataService:1');
-        timer = setTimeout(() => {
-            // タイムアウト
-            timer = null;
-            client.stop();
-            reject(new Error('Can\'t found AiSEG2'));
-        }, 5000);
+            timer = setTimeout(timeout, 1000);
+        };
+        tryproc();
     });
 };
 
