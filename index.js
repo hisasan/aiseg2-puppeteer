@@ -47,6 +47,9 @@ function parseAisegAirEnvironment(col) {
         if (el[j].className == 'num_dot') {
             temp += '.';
         }
+        if (el[j].className == 'num no_minus') {
+            temp += '-';
+        }
     }
     return temp;
 }
