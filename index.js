@@ -174,7 +174,7 @@ aiseg2.prototype.doShutter = async function(address, device, op) {
         headers: headers
     });
     if (response.response.statusCode != 200) {
-        throw new Error(`shutter ${device.name} operation failed.`);
+        throw Error(`shutter ${device.name} operation failed. (statusCode=${response.response.statusCode})`);
     }
     // 読み出したhtmlに下記のような感じでトークンが書かれているのでそれを抜き出す。
     // <!-- コントロールID -->
@@ -217,7 +217,7 @@ aiseg2.prototype.doShutter = async function(address, device, op) {
         headers: headers
     });
     if (response.response.statusCode != 200) {
-        throw new Error(`shutter ${device.name} operation failed.`);
+        throw Error(`shutter ${device.name} operation failed. (statusCode=${response.response.statusCode})`);
     }
     return `shutter ${device.name} operation ${op} success.`;
 };
