@@ -120,39 +120,34 @@ aiseg2.prototype.discover = function() {
 //
 aiseg2.prototype.getShutter = async function(address) {
     let host = addr2host(address);
-    try {
-        // シャッターを検索する
-        // うちはシャッターが3つしかないためこれでいけるが、それを越える場合は別のページも取得しないといけないかも
-        let response = await this.digestRequest.requestAsync({
-            host:    host,
-            path:    '/page/devices/device/325?' + querystring.stringify({
-                page:  '1'
-            }),
-            port:    PORT,
-            method:  'GET',
-            headers: headers
-        });
-        // 下記のような形式で埋め込まれている機器リストを抜き出す
-        // <script type="text/javascript">window.onload = init([{"nodeId":"268...
-        let deviceList = {};
-        const dom = new JSDOM(response.body);
-        const script = dom.window.document.querySelectorAll('script:not([src])');
-        for (let i = 0; i < script.length; i++) {
-            let list = script[i].textContent.match(/window\.onload = init\(([^)]+)\)/);
-            if (list) {
-                let obj = JSON.parse(list[1]);
-                // 抜き出した機器リストの各要素をnameで判定して各機器のテーブルに振り分ける
-                for (let j = 0; j < obj.length; j++) {
-                    deviceList[obj[j].name] = obj[j];
-                }
+    // シャッターを検索する
+    // うちはシャッターが3つしかないためこれでいけるが、それを越える場合は別のページも取得しないといけないかも
+    let response = await this.digestRequest.requestAsync({
+        host:    host,
+        path:    '/page/devices/device/325?' + querystring.stringify({
+            page:  '1'
+        }),
+        port:    PORT,
+        method:  'GET',
+        headers: headers
+    });
+    // 下記のような形式で埋め込まれている機器リストを抜き出す
+    // <script type="text/javascript">window.onload = init([{"nodeId":"268...
+    let deviceList = {};
+    const dom = new JSDOM(response.body);
+    const script = dom.window.document.querySelectorAll('script:not([src])');
+    for (let i = 0; i < script.length; i++) {
+        let list = script[i].textContent.match(/window\.onload = init\(([^)]+)\)/);
+        if (list) {
+            let obj = JSON.parse(list[1]);
+            // 抜き出した機器リストの各要素をnameで判定して各機器のテーブルに振り分ける
+            for (let j = 0; j < obj.length; j++) {
+                deviceList[obj[j].name] = obj[j];
             }
         }
-        debug(`aiseg2.getShutter: ${deviceList}`);
-        return deviceList;
-    } catch (err) {
-        // AiSEG2のシャッター一覧応答を得られなかった
-        throw new Error('Can\'t get AiSEG2 shutter list.');
     }
+    debug(`aiseg2.getShutter: ${deviceList}`);
+    return deviceList;
 };
 
 // シャッター開/閉/停止
@@ -160,111 +155,103 @@ aiseg2.prototype.getShutter = async function(address) {
 // device: getShutterで得たシャッターリストのうち1つ
 // op: opListで定義されている開/閉/停止のうち1つ
 aiseg2.prototype.doShutter = async function(address, device, op) {
-    try {
-        let host = addr2host(address);
-        // まずトークンを得るために機器からhtmlを読み出す。
-        let response = await this.digestRequest.requestAsync({
-            host:    host,
-            path:    '/page/devices/device/325/operation_pu?' + querystring.stringify({
-                page:            '1',
-                page325:         '1',                     // 325がシャッター関係・・かも。
-                nodeId:          device.nodeId,           // このあたり必ずしも操作する
-                eoj:             device.eoj,              // 機器と一致してなくとも良い
-                type:            device.type,             // みたいだが念のため。
-                track:           '325',
-                acceptId:        '83038',                 // この値はなんでもいいみたい。
-                request_by_form: '1'
-            }),
-            port:    PORT,
-            method:  'GET',
-            headers: headers
-        });
-        if (response.response.statusCode != 200) {
-            throw new Error(`shutter ${device.name} operation failed.`);
-        }
-        // 読み出したhtmlに下記のような感じでトークンが書かれているのでそれを抜き出す。
-        // <!-- コントロールID -->
-        // <span class="setting_value" style="display:none;">76856</span>
-        // <!-- トークン -->
-        // <span class="setting_value" style="display:none;">53529</span>
-        // <!-- 呼び出し元URL -->
-        // <span class="setting_value" style="display:none;"></span>
-        // <!-- 機器種別 -->
-        // <span class="setting_value" style="display:none;">0x0e</span>
-        // <!-- 機器名称 -->
-        // <span class="setting_value" style="display:none;"></span>
-        // <!-- 機器情報 -->
-        // <span class="setting_value" style="display:none;"></span>
-        // <!-- 遷移元情報 -->
-        // <span class="setting_value" style="display:none;"></span>
-        const dom = new JSDOM(response.body);
-        const setting_value = dom.window.document.querySelectorAll('.setting_value');
-        // 得たトークンを使ってシャッターを操作する。
-        // POSTするデータは
-        // a) 頭に'data='を付ける。
-        // b) objSendDataプロパティの中身はJSON.stringifyが必要な素敵仕様。
-        debug(`aiseg2.doShutter: ${device.nodeId} ${device.eoj} ${device.type} ${op}`);
-        response = await this.digestRequest.requestAsync({
-            host:    host,
-            path:    '/action/devices/device/325/operation',
-            port:    PORT,
-            method:  'POST',
-            body:    'data=' + JSON.stringify({
-                objSendData:  JSON.stringify({
-                    nodeId:   device.nodeId,
-                    eoj:      device.eoj,
-                    type:     device.type,
-                    device: {
-                        open: op
-                    }
-                }),
-                token: setting_value[1].textContent
-            }),
-            headers: headers
-        });
-        if (response.response.statusCode != 200) {
-            throw new Error(`shutter ${device.name} operation failed.`);
-        }
-        return `shutter ${device.name} operation ${op} success.`;
-    } catch (err) {
+    let host = addr2host(address);
+    // まずトークンを得るために機器からhtmlを読み出す。
+    let response = await this.digestRequest.requestAsync({
+        host:    host,
+        path:    '/page/devices/device/325/operation_pu?' + querystring.stringify({
+            page:            '1',
+            page325:         '1',                     // 325がシャッター関係・・かも。
+            nodeId:          device.nodeId,           // このあたり必ずしも操作する
+            eoj:             device.eoj,              // 機器と一致してなくとも良い
+            type:            device.type,             // みたいだが念のため。
+            track:           '325',
+            acceptId:        '83038',                 // この値はなんでもいいみたい。
+            request_by_form: '1'
+        }),
+        port:    PORT,
+        method:  'GET',
+        headers: headers
+    });
+    if (response.response.statusCode != 200) {
         throw new Error(`shutter ${device.name} operation failed.`);
     }
+    // 読み出したhtmlに下記のような感じでトークンが書かれているのでそれを抜き出す。
+    // <!-- コントロールID -->
+    // <span class="setting_value" style="display:none;">76856</span>
+    // <!-- トークン -->
+    // <span class="setting_value" style="display:none;">53529</span>
+    // <!-- 呼び出し元URL -->
+    // <span class="setting_value" style="display:none;"></span>
+    // <!-- 機器種別 -->
+    // <span class="setting_value" style="display:none;">0x0e</span>
+    // <!-- 機器名称 -->
+    // <span class="setting_value" style="display:none;"></span>
+    // <!-- 機器情報 -->
+    // <span class="setting_value" style="display:none;"></span>
+    // <!-- 遷移元情報 -->
+    // <span class="setting_value" style="display:none;"></span>
+    const dom = new JSDOM(response.body);
+    const setting_value = dom.window.document.querySelectorAll('.setting_value');
+    // 得たトークンを使ってシャッターを操作する。
+    // POSTするデータは
+    // a) 頭に'data='を付ける。
+    // b) objSendDataプロパティの中身はJSON.stringifyが必要な素敵仕様。
+    debug(`aiseg2.doShutter: ${device.nodeId} ${device.eoj} ${device.type} ${op}`);
+    response = await this.digestRequest.requestAsync({
+        host:    host,
+        path:    '/action/devices/device/325/operation',
+        port:    PORT,
+        method:  'POST',
+        body:    'data=' + JSON.stringify({
+            objSendData:  JSON.stringify({
+                nodeId:   device.nodeId,
+                eoj:      device.eoj,
+                type:     device.type,
+                device: {
+                    open: op
+                }
+            }),
+            token: setting_value[1].textContent
+        }),
+        headers: headers
+    });
+    if (response.response.statusCode != 200) {
+        throw new Error(`shutter ${device.name} operation failed.`);
+    }
+    return `shutter ${device.name} operation ${op} success.`;
 };
 
 // 空気環境（温度、湿度）を取得する
 aiseg2.prototype.getAirEnvironment = async function(address) {
     let rooms = [];
-    try {
-        let host = addr2host(address);
+    let host = addr2host(address);
 
-        for (let page = 1; page <= 2; page++) {
-            let response = await this.digestRequest.requestAsync({
-                host:    host,
-                path:    '/page/airenvironment/43?' + querystring.stringify({
-                    page:  page
-                }),
-                port:    PORT,
-                method:  'GET',
-                headers: headers
-            });
+    for (let page = 1; page <= 2; page++) {
+        let response = await this.digestRequest.requestAsync({
+            host:    host,
+            path:    '/page/airenvironment/43?' + querystring.stringify({
+                page:  page
+            }),
+            port:    PORT,
+            method:  'GET',
+            headers: headers
+        });
 
-            const dom = new JSDOM(response.body);
+        const dom = new JSDOM(response.body);
 
-            const area = dom.window.document.getElementById('area');
-            const base = area.getElementsByClassName('base');
-            for (let i = 0; i < base.length; i++) {
-                if (base[i].innerHTML == '') {
-                    continue;
-                }
-                let room = {};
-                room.name = parseAisegName(base[i].getElementsByClassName('txt_name'));
-                room.temp = parseAisegAirEnvironment(base[i].getElementsByClassName('num_ond'));
-                room.humi = parseAisegAirEnvironment(base[i].getElementsByClassName('num_shitudo'));
-                rooms.push(room);
+        const area = dom.window.document.getElementById('area');
+        const base = area.getElementsByClassName('base');
+        for (let i = 0; i < base.length; i++) {
+            if (base[i].innerHTML == '') {
+                continue;
             }
+            let room = {};
+            room.name = parseAisegName(base[i].getElementsByClassName('txt_name'));
+            room.temp = parseAisegAirEnvironment(base[i].getElementsByClassName('num_ond'));
+            room.humi = parseAisegAirEnvironment(base[i].getElementsByClassName('num_shitudo'));
+            rooms.push(room);
         }
-    } catch (err) {
-        throw new Error(`getAirEnvironment operation failed.`);
     }
     return rooms;
 };
