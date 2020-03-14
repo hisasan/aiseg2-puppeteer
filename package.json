@@ -1,6 +1,6 @@
 {
   "name": "aiseg2-puppeteer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Control the device via AiSEG2",
   "main": "index.js",
   "scripts": {
