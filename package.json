@@ -21,7 +21,7 @@
   "homepage": "https://github.com/hisasan/aiseg2-puppeteer#readme",
   "dependencies": {
     "debug": "^4.2.0",
-    "jsdom": "^16.4.0",
+    "jsdom": "^16.6.0",
     "node-ssdp": "^4.0.1",
     "request-digest": "^1.0.13"
   }
